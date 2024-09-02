@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            overflow: hidden;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .meta-info {
+            font-size: 0.9em;
+            color: #666;
+        }
+        .content img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        .content p {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        <p class="meta-info">By {{ author }} | {{ published_date }}</p>
+        {% if image_url %}
+            <img src="{{ image_url }}" alt="Article Image">
+        {% endif %}
+        <p><strong>{{ description }}</strong></p>
+        <div class="content">
+            {% for paragraph in content.split('\n\n') %}
+                <p>{{ paragraph }}</p>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
