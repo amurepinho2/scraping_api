@@ -1,25 +1,43 @@
 import os
-import logging
-from flask import Flask, jsonify, request, render_template, redirect, url_for, abort
+from flask import Flask, jsonify, request, render_template, redirect, url_for
 from bs4 import BeautifulSoup
 import requests
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 
 app = Flask(__name__)
-
-# Configuração de Logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Armazena os últimos 10 links pesquisados
 recent_searches = []
 
 def fetch_article(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return BeautifulSoup(response.text, 'html.parser')
+    # Configurando o Selenium WebDriver com Chrome
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Executar em modo headless, sem abrir a janela do navegador
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"  # Ajuste o caminho conforme necessário
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
+    # Navega até a URL e obtém o conteúdo
+    driver.get(url)
+
+    # Simula clique no botão "Veja Mais" em sites da PEGN e Valor Econômico
+    if "revistapegn.globo.com" in url or "valor.globo.com" in url:
+        try:
+            see_more_button = driver.find_element("id", "mc-read-more-btn")
+            driver.execute_script("arguments[0].click();", see_more_button)
+        except Exception as e:
+            print(f"Erro ao clicar no botão 'Veja Mais': {str(e)}")
+
+    # Obtém o conteúdo da página após o carregamento completo
+    page_source = driver.page_source
+    driver.quit()  # Fecha o navegador
+
+    return BeautifulSoup(page_source, 'html.parser')
 
 def extract_meta_data(soup):
     title = soup.find("meta", property="og:title") or soup.title
@@ -59,9 +77,7 @@ def extract_source(url):
         return "Brazil Journal"
     elif "neofeed.com.br" in url:
         return "NeoFeed"
-    elif "pipelinevalor.globo.com" in url:
-        return "Pipeline Valor"
-    elif "valor.globo.com" in url:
+    elif "pipelinevalor.globo.com" in url or "valor.globo.com" in url:
         return "Valor Econômico"
     elif "exame.com" in url:
         return "Exame"
@@ -73,15 +89,15 @@ def extract_source(url):
         return "Fonte Desconhecida"
 
 def scrape_source(url, soup):
-    if "revistapegn.globo.com" in url:
-        # Ajuste para extrair autor e data no site da PEGN
+    if "revistapegn.globo.com" in url or "valor.globo.com" in url:
+        # Extrai conteúdo de ambas as partes (antes e depois do paywall)
         content = extract_content(soup, [
             "div.no-paywall",  # Parte antes do paywall
             "div.wall.protected-content"  # Parte depois do paywall
         ])
         author, published_date = extract_author_date(soup, 
-            "p.content-publication-data__from",  # Seleciona o autor
-            "time[itemprop='datePublished']")  # Seleciona a data
+            "div.content-publication-data__from span[itemprop='name']", 
+            "time[itemprop='datePublished']")
 
     elif "braziljournal.com" in url:
         content = extract_content(soup, ["div.post-content-text"])
@@ -90,22 +106,17 @@ def scrape_source(url, soup):
             "time.post-time")
 
     elif "neofeed.com.br" in url:
+        # Atualiza a extração de autor e data no NeoFeed
         content = extract_content(soup, ["div.box-content.post-content.td-post-content"])
         author, published_date = extract_author_date(soup, 
             "span.autor_name",  # Ajuste para autor
             "span.date.interna")  # Ajuste para data
 
     elif "pipelinevalor.globo.com" in url:
-        content = extract_content(soup, ["div.no-paywall", "div.wall.protected-content"])
+        content = extract_content(soup, ["div.mc-column.content-text.active-extra-styles"])
         author, published_date = extract_author_date(soup, 
-            "address[itemprop='author'] span[itemprop='name']", 
+            "div.content-publication-data__from span[itemprop='name']", 
             "time[itemprop='datePublished']")
-
-    elif "valor.globo.com" in url:
-        content = extract_content(soup, ["div.no-paywall", "div.wall.protected-content"])
-        author, published_date = extract_author_date(soup, 
-            "address[itemprop='author'] span[itemprop='name']",  # Ajuste para autor no Valor Econômico
-            "time[itemprop='datePublished']")  # Ajuste para data no Valor Econômico
 
     elif "exame.com" in url:
         content = extract_content(soup, ["div#news-body"])
@@ -130,23 +141,10 @@ def scrape_source(url, soup):
 
     return content, author, published_date
 
-@app.before_request
-def block_invalid_requests():
-    if request.method not in ['GET', 'POST']:
-        logger.warning(f"Blocked invalid request method: {request.method}")
-        abort(405)
-    
-    if request.endpoint != 'index' and request.endpoint != 'scrape':
-        logger.warning(f"Blocked access to invalid endpoint: {request.endpoint}")
-        abort(404)
-    
-    logger.info(f"Received request: {request.method} {request.url}")
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         url = request.form['url']
-        logger.info(f"Processing URL: {url}")
         return redirect(url_for('scrape', url=url, new_search=True))
     return render_template('index.html', recent_searches=recent_searches)
 
@@ -156,7 +154,6 @@ def scrape():
     new_search = request.args.get('new_search', default=False, type=bool)
 
     if not url:
-        logger.error("No URL provided in the request")
         return jsonify({"error": "URL is required"}), 400
 
     try:
@@ -185,14 +182,13 @@ def scrape():
             "image_url": image_url
         }
 
-        logger.info(f"Scraped content from {url}")
         return render_template('article.html', title=title, description=description, 
                                author=author, published_date=published_date, 
                                content=content, image_url=image_url,
                                json_summary=json_summary, url=url)
 
     except Exception as e:
-        logger.error(f"Error processing {url}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# Remover app.run() para produção, pois o Google Cloud usará o Gunicorn ou outro servidor WSGI
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
