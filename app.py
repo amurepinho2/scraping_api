@@ -3,6 +3,7 @@ import logging
 from flask import Flask, jsonify, request, render_template, redirect, url_for, abort
 from bs4 import BeautifulSoup
 import requests
+from dateutil import parser
 
 app = Flask(__name__)
 
@@ -50,7 +51,20 @@ def extract_author_date(soup, author_selector, date_selector):
     date_tag = soup.select_one(date_selector)
     author = author_tag.get_text().strip() if author_tag else "Autor não encontrado"
     published_date = date_tag.get_text().strip() if date_tag else "Data de publicação não encontrada"
-    return author, published_date
+    return author, sanitize_date(published_date)
+
+def sanitize_date(date_str):
+    """
+    Converte uma data em string para o formato ISO 8601 (YYYY-MM-DDTHH:MM:SS).
+    """
+    try:
+        # Use dateutil.parser para analisar datas em diferentes formatos
+        parsed_date = parser.parse(date_str)
+        # Converta para o formato ISO 8601
+        return parsed_date.isoformat()
+    except Exception as e:
+        logger.warning(f"Erro ao converter a data: {date_str} - {str(e)}")
+        return date_str
 
 def extract_source(url):
     if "revistapegn.globo.com" in url:
@@ -74,14 +88,13 @@ def extract_source(url):
 
 def scrape_source(url, soup):
     if "revistapegn.globo.com" in url:
-        # Ajuste para extrair autor e data no site da PEGN
         content = extract_content(soup, [
-            "div.no-paywall",  # Parte antes do paywall
-            "div.wall.protected-content"  # Parte depois do paywall
+            "div.no-paywall",  
+            "div.wall.protected-content"  
         ])
         author, published_date = extract_author_date(soup, 
-            "p.content-publication-data__from",  # Seleciona o autor
-            "time[itemprop='datePublished']")  # Seleciona a data
+            "p.content-publication-data__from",  
+            "time[itemprop='datePublished']")
 
     elif "braziljournal.com" in url:
         content = extract_content(soup, ["div.post-content-text"])
@@ -92,8 +105,8 @@ def scrape_source(url, soup):
     elif "neofeed.com.br" in url:
         content = extract_content(soup, ["div.box-content.post-content.td-post-content"])
         author, published_date = extract_author_date(soup, 
-            "span.autor_name",  # Ajuste para autor
-            "span.date.interna")  # Ajuste para data
+            "span.autor_name",  
+            "span.date.interna")
 
     elif "pipelinevalor.globo.com" in url:
         content = extract_content(soup, ["div.no-paywall", "div.wall.protected-content"])
@@ -104,8 +117,8 @@ def scrape_source(url, soup):
     elif "valor.globo.com" in url:
         content = extract_content(soup, ["div.no-paywall", "div.wall.protected-content"])
         author, published_date = extract_author_date(soup, 
-            "address[itemprop='author'] span[itemprop='name']",  # Ajuste para autor no Valor Econômico
-            "time[itemprop='datePublished']")  # Ajuste para data no Valor Econômico
+            "address[itemprop='author'] span[itemprop='name']",  
+            "time[itemprop='datePublished']")
 
     elif "exame.com" in url:
         content = extract_content(soup, ["div#news-body"])
@@ -122,8 +135,8 @@ def scrape_source(url, soup):
     elif "startups.com.br" in url:
         content = extract_content(soup, ["div.TheContent"])
         author, published_date = extract_author_date(soup, 
-            "a[title]",  # Seleciona o autor
-            "time")  # Seleciona o elemento de data
+            "a[title]",  
+            "time")  
 
     else:
         content, author, published_date = "Fonte não reconhecida", "Autor desconhecido", "Data desconhecida"
@@ -164,13 +177,13 @@ def scrape():
         title, description = extract_meta_data(soup)
         content, author, published_date = scrape_source(url, soup)
         image_url = extract_image(soup)
-        source = extract_source(url)  # Extraímos o veículo aqui
+        source = extract_source(url)
 
         if new_search:
             recent_searches.insert(0, {
                 "title": title,
                 "url": url,
-                "source": source,  # Adicionamos o veículo à pesquisa recente
+                "source": source,
                 "published_date": published_date,
                 "author": author
             })
