@@ -9,19 +9,21 @@
             font-family: 'Helvetica Neue', Arial, sans-serif;
             background-color: #f8f9fa;
             color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
         .container {
             width: 100%;
             max-width: 600px;
             text-align: center;
             padding: 20px;
+            position: relative;
+            z-index: 1;
         }
         h1 {
             font-size: 36px;
@@ -68,6 +70,7 @@
             margin-top: 30px;
             text-align: left;
             font-size: 16px;
+            overflow-y: auto;
         }
         th, td {
             padding: 15px;
@@ -84,6 +87,12 @@
         }
         td a:hover {
             color: #0056b3;
+        }
+        .recent-searches {
+            flex-grow: 1;
+            width: 100%;
+            overflow-y: auto;
+            max-height: calc(100vh - 300px); /* Adjust this value based on your design */
         }
         /* Spinner (Loading Indicator) */
         .spinner {
@@ -112,7 +121,8 @@
         </form>
         <!-- Spinner -->
         <div id="spinner" class="spinner"></div>
-
+    </div>
+    <div class="recent-searches">
         {% if recent_searches %}
             <table>
                 <thead>
