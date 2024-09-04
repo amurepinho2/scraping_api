@@ -1,10 +1,11 @@
 import os
 import logging
-from flask import Flask, jsonify, request, render_template, redirect, url_for, abort
+from flask import Flask, jsonify, request, render_template, redirect, url_for, abort, make_response
 from bs4 import BeautifulSoup
 import requests
 from dateutil import parser
 import re
+import json
 
 app = Flask(__name__)
 
@@ -213,6 +214,7 @@ def index():
 def scrape():
     url = request.args.get('url')
     new_search = request.args.get('new_search', default=False, type=bool)
+    response_format = request.args.get('format', 'html')
 
     if not url:
         logger.error("No URL provided in the request")
@@ -225,6 +227,23 @@ def scrape():
         image_url = extract_image(soup)
         source = extract_source(url)
 
+        # Incluindo a origem (veículo) no JSON de resposta
+        json_summary = {
+            "title": title,
+            "description": description,
+            "author": author,
+            "published_date": published_date,
+            "image_url": image_url,
+            "content": content,  # Inclui o conteúdo completo
+            "source": source  # Inclui o nome do veículo
+        }
+
+        if response_format == 'json':
+            # Retorna o JSON formatado sem Unicode escapado
+            response = make_response(json.dumps(json_summary, ensure_ascii=False))
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+            return response
+
         if new_search:
             recent_searches.insert(0, {
                 "title": title,
@@ -235,14 +254,6 @@ def scrape():
             })
             if len(recent_searches) > 10:
                 recent_searches.pop()
-
-        json_summary = {
-            "title": title,
-            "description": description,
-            "author": author,
-            "published_date": published_date,
-            "image_url": image_url
-        }
 
         logger.info(f"Scraped content from {url}")
         return render_template('article.html', title=title, description=description, 
