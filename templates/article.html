@@ -119,6 +119,7 @@
     <div class="controls">
         <button onclick="window.location.href='/'">Nova Busca</button>
         <a href="{{ url }}" target="_blank">Abrir link</a>
+        <button onclick="copyToClipboard()">Copiar link</button> <!-- Botão de copiar link -->
     </div>
     
     <div class="container">
@@ -141,7 +142,15 @@
     </div>
 
     <script>
-        // Implementa o comportamento dos botões, se necessário
+        // Função para copiar o link para a área de transferência
+        function copyToClipboard() {
+            const url = "{{ url }}";  // Obtém o link da matéria
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Link copiado para a área de transferência!');
+            }).catch(err => {
+                console.error('Erro ao copiar o link:', err);
+            });
+        }
     </script>
 </body>
 </html>

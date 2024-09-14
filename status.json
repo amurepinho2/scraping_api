@@ -1,0 +1,47 @@
+{
+    "NeoFeed": {
+        "status": "OK",
+        "author": "Ivan Ryngelblum",
+        "published_date": "2024-08-14T13:28:00"
+    },
+    "PEGN": {
+        "status": "OK",
+        "author": "Luana de Andrade",
+        "published_date": "2024-08-21T10:00:00"
+    },
+    "Valor Econômico": {
+        "status": "OK",
+        "author": "Toni Sciarretta",
+        "published_date": "2024-08-19T16:47:00"
+    },
+    "Pipeline Valor": {
+        "status": "OK",
+        "author": "Dow Jones Newswires",
+        "published_date": "2024-08-19T14:50:00"
+    },
+    "Startups": {
+        "status": "OK",
+        "author": "Stephanie Tondo",
+        "published_date": "2024-09-10T00:00:00"
+    },
+    "Infomoney": {
+        "status": "Success",
+        "author": "Iuri Santos",
+        "published_date": "2024-09-12T05:00:00-03:00"
+    },
+    "Brazil Journal": {
+        "status": "Success",
+        "author": "André Jankavski",
+        "published_date": "2024-09-05T00:00:00"
+    },
+    "Startupi": {
+        "status": "OK",
+        "author": "Cecília Ferraz",
+        "published_date": "2024-09-13T00:00:00"
+    },
+    "Exame": {
+        "status": "Success",
+        "author": "Marcos Bonfim",
+        "published_date": "2024-09-03T00:00:00"
+    }
+}

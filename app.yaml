@@ -1,5 +1,10 @@
-runtime: python39
-entrypoint: gunicorn -b :$PORT app:app
+runtime: python39  # Ou a versão do Python que você está utilizando
+
+entrypoint: gunicorn -b :$PORT app:app  # Certifique-se de que o app está sendo servido corretamente pelo Gunicorn
+
+# Configurações de tempo limite e escalonamento
+manual_scaling:
+  instances: 1
 
 handlers:
 - url: /static

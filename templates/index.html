@@ -109,6 +109,10 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Table for status */
+        .status-table {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
@@ -122,6 +126,7 @@
         <!-- Spinner -->
         <div id="spinner" class="spinner"></div>
     </div>
+
     <div class="recent-searches">
         {% if recent_searches %}
             <table>
@@ -146,6 +151,32 @@
             </table>
         {% endif %}
     </div>
+
+    <!-- Status table for showing last check results -->
+    <div class="status-table">
+        <h2>Status dos Últimos Veículos Verificados</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Veículo</th>
+                    <th>Status</th>
+                    <th>Autor</th>
+                    <th>Data de Publicação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vehicle, data in status_data.items() %}
+                    <tr>
+                        <td>{{ vehicle }}</td>
+                        <td>{{ data.status }}</td>
+                        <td>{{ data.author }}</td>
+                        <td>{{ data.published_date }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <script>
         document.getElementById('articleForm').addEventListener('submit', function() {
             // Show the spinner when the form is submitted

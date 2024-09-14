@@ -32,6 +32,20 @@ MONTHS_PT_BR = {
     "dezembro": "December"
 }
 
+def load_status_data():
+    """Carrega o conteúdo do arquivo status.json."""
+    status_file = 'status.json'
+    if os.path.exists(status_file):
+        with open(status_file, 'r') as f:
+            try:
+                status_data = json.load(f)
+            except json.JSONDecodeError:
+                status_data = {}
+    else:
+        status_data = {}
+    return status_data
+
+
 def fetch_article(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36"
@@ -47,15 +61,33 @@ def extract_meta_data(soup):
     description = description["content"] if description else "Descrição não encontrada"
     return title, description
 
-def extract_content(soup, selectors):
-    content = ""
-    for selector in selectors:
-        content_div = soup.select_one(selector)
+def extract_content(soup, source=None):
+    if source == "Exame":
+        content = ""
+        content_div = soup.select_one("div#news-body")
+        if content_div:
+            # Itera sobre os elementos dentro do corpo de notícias
+            for element in content_div.find_all(True, recursive=False):
+                # Interrompe a extração se encontrar a galeria
+                if element.name == "div" and element.has_attr('data-gallery-slug'):
+                    break
+                # Adiciona o texto de cada parágrafo
+                if element.name == "p":
+                    content += element.get_text() + "\n\n"
+        return content or "Conteúdo do artigo não encontrado"
+
+    elif source == "Infomoney":
+        content_div = soup.select_one("article.im-article.clear-fix")
         if content_div:
             paragraphs = content_div.find_all("p")
-            content += "\n\n".join([p.get_text() for p in paragraphs])
-            content += "\n\n"
-    return content or "Conteúdo do artigo não encontrado"
+            content = "\n\n".join([p.get_text() for p in paragraphs if "Continua depois da publicidade" not in p.get_text()])
+        return content or "Conteúdo do artigo não encontrado"
+
+    # Outros veículos - exemplo genérico sem 'selectors'
+    else:
+        paragraphs = soup.find_all("p")
+        content = "\n\n".join([p.get_text() for p in paragraphs])
+        return content or "Conteúdo do artigo não encontrado"
 
 def extract_image(soup):
     image = soup.find("meta", property="og:image")
@@ -76,15 +108,17 @@ def parse_custom_date_format(date_str, source):
     try:
         if source == "Exame":
             # Padrão para Exame: "Publicado em 21 de agosto de 2024 às 11h29."
-            match = re.search(r"Publicado em (\d{2}) de (\w+) de (\d{4}) às (\d{2})h(\d{2})", date_str)
+            # Ajuste para pegar apenas o dia, mês e ano, ignorando a hora
+            match = re.search(r"Publicado em (\d{1,2}) de (\w+) de (\d{4})", date_str)
             if match:
-                day, month_pt, year, hour, minute = match.groups()
+                day, month_pt, year = match.groups()
                 month = MONTHS_PT_BR.get(month_pt.lower(), month_pt)
-                date_str = f"{day} {month} {year} {hour}:{minute}"
+                date_str = f"{day} {month} {year}"
                 return sanitize_date(date_str)
 
-        elif source == "Brazil Journal" or source == "Startups":
-            match = re.search(r"(\d{2}) de (\w+) de (\d{4})", date_str)
+        elif source == "Brazil Journal" or source == "Startups" or source == "Startupi":
+            # Padrão: "5 de setembro de 2024"
+            match = re.search(r"(\d{1,2}) de (\w+) de (\d{4})", date_str)  # Aceita dias com um ou dois dígitos
             if match:
                 day, month_pt, year = match.groups()
                 month = MONTHS_PT_BR.get(month_pt.lower(), month_pt)
@@ -100,22 +134,40 @@ def extract_author_date(soup, author_selector, date_selector, source=None):
     author_tag = soup.select_one(author_selector)
     date_tag = soup.select_one(date_selector)
 
-    published_date = date_tag.get_text().strip() if date_tag else "Data de publicação não encontrada"
-    if source:
-        published_date = parse_custom_date_format(published_date, source)
-    else:
+    if source == "Startups":
+        date_text = date_tag.get_text().strip() if date_tag else "Data de publicação não encontrada"
+        date_text = date_text.split('|')[0].strip()
+        published_date = parse_custom_date_format(date_text, source)
+        author = author_tag['title'].strip() if author_tag and author_tag.get('title') else "Autor não encontrado"
+    elif source == "Infomoney":
+        author = author_tag.get_text().strip() if author_tag else "Autor não encontrado"
+        published_date = date_tag['datetime'] if date_tag and date_tag.has_attr('datetime') else "Data de publicação não encontrada"
         published_date = sanitize_date(published_date)
-
-    author = author_tag.get_text().strip() if author_tag else "Autor não encontrado"
-    
-    # Se o autor for extraído do título do link, remova "Por" e outros prefixos indesejados
-    if author_tag and author_tag.get('title'):
-        author = author_tag['title'].strip()
+    else:
+        published_date = date_tag.get_text().strip() if date_tag else "Data de publicação não encontrada"
+        published_date = parse_custom_date_format(published_date, source) if source else sanitize_date(published_date)
+        author = author_tag.get_text().strip() if author_tag else "Autor não encontrado"
     
     return author, published_date
 
+def extract_title_subtitle(soup, source):
+    if source == "Exame":
+        title = soup.select_one("h1.headline-large").get_text(strip=True)
+        subtitle = soup.select_one("h2.title-medium").get_text(strip=True)
+        return title, subtitle
+    
+    elif source == "Infomoney":
+        title = soup.select_one('div[data-ds-component="article-title"] h1').get_text(strip=True)
+        subtitle = soup.select_one('div.text-lg.md\\:text-xl.font-medium').get_text(strip=True)
+        return title, subtitle
+    
+    return "Título não encontrado", "Subtítulo não encontrado"
+
+
 def extract_source(url):
-    if "revistapegn.globo.com" in url:
+    if "infomoney.com.br" in url:
+        return "Infomoney"
+    elif "revistapegn.globo.com" in url:
         return "PEGN"
     elif "braziljournal.com" in url:
         return "Brazil Journal"
@@ -137,7 +189,22 @@ def extract_source(url):
 def scrape_source(url, soup):
     source = extract_source(url)
 
-    if source == "PEGN":
+    if source == "Infomoney":
+        title, subtitle = extract_title_subtitle(soup, source)
+        content = extract_content(soup, source="Infomoney")
+        author, published_date = extract_author_date(soup, 
+            'a.text-base.md\\:text-lg.font-semibold',  # Autor
+            'time[datetime]',  # Data
+            source="Infomoney")
+    
+    elif source == "Exame":
+        title, subtitle = extract_title_subtitle(soup, source)
+        content = extract_content(soup, source="Exame")
+        author, published_date = extract_author_date(soup, 
+            "a.m-0.p-0.text-colors-text.lg\\:text-pretty.label-small.hover\\:underline", 
+            "p.m-0.p-0.text-colors-text.lg\\:text-pretty.body-small", source="Exame")
+
+    elif source == "PEGN":
         content = extract_content(soup, ["div.no-paywall", "div.wall.protected-content"])
         author, published_date = extract_author_date(soup, 
             "address[itemprop='author'] span[itemprop='name']",  # Ajuste para autor no PEGN
@@ -167,12 +234,6 @@ def scrape_source(url, soup):
             "address[itemprop='author'] span[itemprop='name']", 
             "time[itemprop='datePublished']")
 
-    elif source == "Exame":
-        content = extract_content(soup, ["div#news-body"])
-        author, published_date = extract_author_date(soup, 
-            "a.m-0.p-0.text-colors-text.lg\\:text-pretty.label-small.hover\\:underline", 
-            "p.m-0.p-0.text-colors-text.lg\\:text-pretty.body-small", source="Exame")
-
     elif source == "Startupi":
         content = extract_content(soup, ["div.post-content"])
         author, published_date = extract_author_date(soup, 
@@ -189,6 +250,7 @@ def scrape_source(url, soup):
         content, author, published_date = "Fonte não reconhecida", "Autor desconhecido", "Data desconhecida"
 
     return content, author, published_date
+
 
 @app.before_request
 def block_invalid_requests():
@@ -208,7 +270,47 @@ def index():
         url = request.form['url']
         logger.info(f"Processing URL: {url}")
         return redirect(url_for('scrape', url=url, new_search=True))
-    return render_template('index.html', recent_searches=recent_searches)
+
+    # Carregar o status dos veículos do arquivo status.json
+    status_data = load_status_data()
+
+    return render_template('index.html', recent_searches=recent_searches, status_data=status_data)
+
+
+def fetch_article(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.text  # Retorna o HTML bruto da página
+
+def save_status_to_json(source, status, author, published_date):
+    """Salva o status de cada veículo em um arquivo JSON"""
+    status_file = 'status.json'
+    try:
+        if os.path.exists(status_file):
+            with open(status_file, 'r') as f:
+                status_data = json.load(f)
+        else:
+            status_data = {}
+
+        # Atualiza o status do veículo
+        status_data[source] = {
+            "status": status,
+            "author": author,
+            "published_date": published_date
+        }
+
+        # Salva o status atualizado no arquivo
+        with open(status_file, 'w') as f:
+            json.dump(status_data, f, ensure_ascii=False, indent=4)
+
+        logger.info(f"Status do veículo {source} atualizado com sucesso.")
+    except Exception as e:
+        logger.error(f"Erro ao salvar status: {str(e)}")
+
+
 
 @app.route('/scrape', methods=['GET'])
 def scrape():
@@ -221,47 +323,71 @@ def scrape():
         return jsonify({"error": "URL is required"}), 400
 
     try:
-        soup = fetch_article(url)
+        html_raw = fetch_article(url)
+
+        if response_format == 'htmlraw':
+            response = make_response(html_raw)
+            response.headers['Content-Type'] = 'text/html; charset=utf-8'
+            return response
+
+        soup = BeautifulSoup(html_raw, 'html.parser')
         title, description = extract_meta_data(soup)
         content, author, published_date = scrape_source(url, soup)
         image_url = extract_image(soup)
         source = extract_source(url)
 
-        # Incluindo a origem (veículo) no JSON de resposta
+        # Salvar o status no arquivo JSON
+        save_status_to_json(source, "Success", author, published_date)
+
         json_summary = {
             "title": title,
             "description": description,
             "author": author,
             "published_date": published_date,
             "image_url": image_url,
-            "content": content,  # Inclui o conteúdo completo
-            "source": source  # Inclui o nome do veículo
+            "content": content,
+            "source": source
         }
 
         if response_format == 'json':
-            # Retorna o JSON formatado sem Unicode escapado
             response = make_response(json.dumps(json_summary, ensure_ascii=False))
             response.headers['Content-Type'] = 'application/json; charset=utf-8'
             return response
 
-        if new_search:
-            recent_searches.insert(0, {
-                "title": title,
-                "url": url,
-                "source": source,
-                "published_date": published_date,
-                "author": author
-            })
-            if len(recent_searches) > 10:
-                recent_searches.pop()
+        elif response_format == 'jsonstring':
+            json_string = {
+                "role": "user",
+                "content": f"Veículo: {source} Título: {title} Descrição: {description} "
+                           f"Autor: {author} Data de publicação: {published_date} Conteúdo: {content}"
+            }
+            response = make_response(json.dumps(json_string, ensure_ascii=False))
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+            return response
 
-        logger.info(f"Scraped content from {url}")
-        return render_template('article.html', title=title, description=description, 
-                               author=author, published_date=published_date, 
-                               content=content, image_url=image_url,
-                               json_summary=json_summary, url=url)
+        elif response_format == 'html':
+            if new_search:
+                recent_searches.insert(0, {
+                    "title": title,
+                    "url": url,
+                    "source": source,
+                    "published_date": published_date,
+                    "author": author
+                })
+                if len(recent_searches) > 10:
+                    recent_searches.pop()
+
+            return render_template('article.html', title=title, description=description, 
+                                   author=author, published_date=published_date, 
+                                   content=content, image_url=image_url,
+                                   json_summary=json_summary, url=url)
+
+        else:
+            return jsonify({"error": "Invalid format specified"}), 400
 
     except Exception as e:
+        # Em caso de erro, salvar o status de erro
+        source = extract_source(url)
+        save_status_to_json(source, "Error", "Autor não encontrado", "Data não encontrada")
         logger.error(f"Error processing {url}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
